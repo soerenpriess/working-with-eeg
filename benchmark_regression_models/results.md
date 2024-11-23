@@ -55,7 +55,6 @@ Model size in memory: 0.75 MB
 - Speichernutzung:
     - KNN speichert alle Trainingsdaten, was bei 343 Features viel Speicher benötigen kann.
     - RF speichert nur die Baumstrukturen, was bei 77 Features eigentlich weniger Speicher benötigt.
-        - TODO: - Paradox mit den Ergebnissen
 - Skalierbarkeit:
     - KNN skaliert schlecht mit zunehmender Datenmenge und Dimensionalität.
     - RF skaliert besser und kann mit weniger Features oft gute Ergebnisse liefern.

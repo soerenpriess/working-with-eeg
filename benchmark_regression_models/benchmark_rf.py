@@ -9,10 +9,29 @@ from sklearn.metrics import accuracy_score
 import time
 import psutil
 import os
+import sys
 
 def get_memory_usage():
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024 / 1024  # in MB
+
+def get_size(obj, seen=None):
+    """Recursively calculate size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
 
 # Generate synthetic training data
 np.random.seed(42)
@@ -68,4 +87,4 @@ print(f"Number of features: {X_train.shape[1]}")
 print(f"Number of training samples: {X_train.shape[0]}")
 print(f"Number of test samples: {X_test.shape[0]}")
 print(f"Number of trees in the forest: {rf_model.n_estimators}")
-print(f"Model size in memory: {rf_model.__sizeof__() / 1024 / 1024:.2f} MB")
+print(f"Model size in memory: {get_size(rf_model) / 1024 / 1024:.2f} MB")

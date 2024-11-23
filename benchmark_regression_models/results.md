@@ -12,7 +12,7 @@ Prediction time for a single sample: 0.004004 seconds
 Number of features: 343
 Number of training samples: 10000
 Number of test samples: 1000
-Model size in memory: 0.00 M
+Model size in memory: 26.50 MB
 ```
 
 ## RF (Random-Forest)
@@ -30,7 +30,7 @@ Number of features: 77
 Number of training samples: 10000
 Number of test samples: 1000
 Number of trees in the forest: 500
-Model size in memory: 0.00 MB
+Model size in memory: 0.75 MB
 ```
 
 | Aspekt                                  | KNN (343 Features)   | Random Forest (77 Features) |
@@ -43,7 +43,7 @@ Model size in memory: 0.00 MB
 | Number of features                      | 343                  | 77                          |
 | Number of training samples              | 10000                | 10000                       |
 | Number of test samples                  | 1000                 | 1000                        |
-| Model size in memory                    | 0.00 MB              | 0.00 MB                     |
+| Model size in memory                    | 26.50 MB             | 0.75 MB                     |
 
 # Ergebnisse
 - Trainingszeit:

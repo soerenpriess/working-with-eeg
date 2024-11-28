@@ -117,7 +117,7 @@ def preprocess_data(raw):
     start_time = time.time()
     raw.apply_function(signal.detrend, overwrite_data=True)
     end_time = time.time()
-    print(f"Detrending took {end_time - start_time:.2f} seconds\n")
+    print(f"Detrending took {end_time - start_time:.4f} seconds\n")
 
     #notch filter
     print("Notch filtering signal...")
@@ -125,7 +125,7 @@ def preprocess_data(raw):
     notched_raw = raw.copy()
     notched_raw.notch_filter(60)
     end_time = time.time()
-    print(f"Notch filtering took {end_time - start_time:.2f} seconds\n")
+    print(f"Notch filtering took {end_time - start_time:.4f} seconds\n")
 
     # wavelet thresholding
     print("Wavelet denoising signal...")
@@ -137,7 +137,7 @@ def preprocess_data(raw):
         denoised_data = wavelet_denoising(eeg_data)
         wavelet_raw._data[wavelet_raw.ch_names.index(ch)] = denoised_data
     end_time = time.time()
-    print(f"Wavelet denoising took {end_time - start_time:.2f} seconds\n")
+    print(f"Wavelet denoising took {end_time - start_time:.4f} seconds\n")
 
     return wavelet_raw
 
@@ -155,7 +155,7 @@ def left_tree(preprocessed_data):
     for band, (low_freq, high_freq) in freq_ranges.items():
         filtered_data[band] = preprocessed_data.copy().filter(l_freq=low_freq, h_freq=high_freq, method='fir')
     end_time = time.time()
-    print(f"Getting alpha, beta, gamma took {end_time - start_time:.2f} seconds\n")
+    print(f"Getting alpha, beta, gamma took {end_time - start_time:.4f} seconds\n")
 
     print("calc hjorth parameters and spectral entropy...")
     start_time = time.time()
@@ -172,7 +172,7 @@ def left_tree(preprocessed_data):
             features[band]['hjorth'].append((h1, h2, h3))
             features[band]['spectral_entropy'].append(se)
     end_time = time.time()
-    print(f"Calculating hjorth parameters and spectral entropy took {end_time - start_time:.2f} seconds\n")
+    print(f"Calculating hjorth parameters and spectral entropy took {end_time - start_time:.4f} seconds\n")
     return features
 
 def middle_tree(preprocessed_data):
@@ -195,7 +195,7 @@ def middle_tree(preprocessed_data):
             'D3': coeffs[3]
         }
     end_time = time.time()
-    print(f"Wavelet decomposition took {end_time - start_time:.2f} seconds\n")
+    print(f"Wavelet decomposition took {end_time - start_time:.4f} seconds\n")
 
     print('calc wavelet energy and entrioy (from each D)...')
     start_time = time.time()
@@ -217,7 +217,7 @@ def middle_tree(preprocessed_data):
             }
         }
     end_time = time.time()
-    print(f"Calculating wavelet energy and entropy took {end_time - start_time:.2f} seconds\n")
+    print(f"Calculating wavelet energy and entropy took {end_time - start_time:.4f} seconds\n")
 
     return wavelet_features
 
@@ -231,7 +231,7 @@ def right_tree(preprocessed_data):
         imfs = calculate_imfs(eeg_data)
         imfs_dict[ch] = imfs
     end_time = time.time()
-    print(f"EMD decomposition took {end_time - start_time:.2f} seconds\n")
+    print(f"EMD decomposition took {end_time - start_time:.4f} seconds\n")
 
     print("imf energy and entropy... (from each IMF)")
     start_time = time.time()
@@ -242,11 +242,39 @@ def right_tree(preprocessed_data):
             energy, entropy_value = calculate_imf_features(imf)
             imf_features[ch].append((energy, entropy_value))
     end_time = time.time()
-    print(f"Calculating IMF energy and entropy took {end_time - start_time:.2f} seconds\n")
+    print(f"Calculating IMF energy and entropy took {end_time - start_time:.4f} seconds\n")
 
     return imf_features
 
 
+def calculate_differential_asymmetry(results):
+    asymmetry = {}
+    channel_pairs = [('F7', 'F8'), ('F3', 'F4'), ('T7', 'T8'), ('P7', 'P8'), ('O1', 'O2')]
+    
+    for left, right in channel_pairs:
+        asymmetry[f"{left}-{right}"] = {
+            'alpha': {
+                'hjorth': [
+                    results[left]['alpha']['hjorth'][i] - results[right]['alpha']['hjorth'][i]
+                    for i in range(3)
+                ],
+                'spectral_entropy': results[left]['alpha']['spectral_entropy'] - results[right]['alpha']['spectral_entropy']
+            },
+            'wavelet': {
+                f"D{i}": {
+                    'Energy': results[left]['wavelet'][f"D{i}"]['Energy'] - results[right]['wavelet'][f"D{i}"]['Energy'],
+                    'Entropy': results[left]['wavelet'][f"D{i}"]['Entropy'] - results[right]['wavelet'][f"D{i}"]['Entropy']
+                } for i in range(1, 4)
+            },
+            'imf': {
+                f"imf{i}": {
+                    'energy': results[left][f"imf{i}"]['energy'] - results[right][f"imf{i}"]['energy'],
+                    'entropy': results[left][f"imf{i}"]['entropy'] - results[right][f"imf{i}"]['entropy']
+                } for i in range(1, 3) # TODO: für IMF3 implementieren (range 1, 4)
+            }
+        }
+    
+    return asymmetry
 
 
 
@@ -268,6 +296,9 @@ def right_tree(preprocessed_data):
 
 
 def main():
+    # Setze das Logging-Level von MNE auf WARNING
+    mne.set_log_level('WARNING')
+
     overall_start_time = time.time()
 
     # Load data
@@ -277,46 +308,91 @@ def main():
     desired_channels = ["F7", "F3", "T7", "P7", "O1", "O2", "P8", "T8", "F4", "F8"]
     raw = load_and_format_raw_data(file_path, desired_channels)
     end_time = time.time()
-    print(f"Data loading and formatting took {end_time - start_time:.2f} seconds\n")
+    print(f"Data loading and formatting took {end_time - start_time:.4f} seconds\n")
 
     # Preprocess data
     print("-----------------Preprocessing data-----------------")
     start_time = time.time()
     preprocessed_data = preprocess_data(raw)
     end_time = time.time()
-    print(f"Data preprocessing took {end_time - start_time:.2f} seconds")
+    print(f"Data preprocessing took {end_time - start_time:.4f} seconds")
     print("-----------------------------------------------------\n")
 
     print("-----------------left tree-----------------")
     start_time = time.time()
     hjort_and_entropy = left_tree(preprocessed_data)
     end_time = time.time()
-    print(f"Left tree took {end_time - start_time:.2f} seconds")
+    print(f"Left tree took {end_time - start_time:.4f} seconds")
     print("-----------------------------------------------------\n")
 
     print("-----------------middle tree-----------------")
     start_time = time.time()
     wavelet_energy_entropy = middle_tree(preprocessed_data)
     end_time = time.time()
-    print(f"Middle tree took {end_time - start_time:.2f} seconds")
+    print(f"Middle tree took {end_time - start_time:.4f} seconds")
     print("-----------------------------------------------------\n")
 
     print("-----------------right tree-----------------")
     start_time = time.time()
     imf_energy_and_entropy = right_tree(preprocessed_data)
     end_time = time.time()
-    print(f"Right tree took {end_time - start_time:.2f} seconds")
+    print(f"Right tree took {end_time - start_time:.4f} seconds")
     print("-----------------------------------------------------\n")
 
+    overall_end_time_base_features = time.time()
+    print(f"Overall runtime base features: {overall_end_time_base_features - overall_start_time:.4f} seconds")
+
+
+
+
+    # print(json.dumps(hjort_and_entropy, indent=4))
+    # print(json.dumps(wavelet_energy_entropy, indent=4))
+    # print(json.dumps(imf_energy_and_entropy, indent=4))
+
+
+    results = {}
+    for i, ch in enumerate(preprocessed_data.ch_names):
+        results[ch] = {
+            'alpha': {
+                'hjorth': hjort_and_entropy['alpha']['hjorth'][i],
+                'spectral_entropy': hjort_and_entropy['alpha']['spectral_entropy'][i]
+            },
+            'beta': {
+                'hjorth': hjort_and_entropy['beta']['hjorth'][i],
+                'spectral_entropy': hjort_and_entropy['beta']['spectral_entropy'][i]
+            },
+            'gamma': {
+                'hjorth': hjort_and_entropy['gamma']['hjorth'][i],
+                'spectral_entropy': hjort_and_entropy['gamma']['spectral_entropy'][i]
+            },
+            'wavelet': wavelet_energy_entropy[f'Channel_{i+1}'],
+            'imf1': {
+                'energy': imf_energy_and_entropy[ch][0][0],
+                'entropy': imf_energy_and_entropy[ch][0][1]
+            },
+            'imf2': {
+                'energy': imf_energy_and_entropy[ch][1][0],
+                'entropy': imf_energy_and_entropy[ch][1][1]
+            },
+            # 'imf3': {
+            #     'energy': None, # imf_energy_and_entropy[ch][2][0],
+            #     'entropy': None # imf_energy_and_entropy[ch][2][1]
+            # } //TODO: für IMF3 implementieren
+        }
+    
+
+    print("-----------------differential asymmetry-----------------")
+    start_time = time.time()
+    asymmetry = calculate_differential_asymmetry(results)
+    end_time = time.time()
+    print(f"Differential asymmetry took {end_time - start_time:.4f} seconds")
+    
+
+    results['asymmetry'] = asymmetry
     overall_end_time = time.time()
-    print(f"Overall runtime: {overall_end_time - overall_start_time:.2f} seconds")
+    print(f"Overall runtime: {overall_end_time - overall_start_time:.4f} seconds")
 
-
-
-
-    print(json.dumps(hjort_and_entropy, indent=4))
-    print(json.dumps(wavelet_energy_entropy, indent=4))
-    print(json.dumps(imf_energy_and_entropy, indent=4))
+    # print(json.dumps(results, indent=4))
 
 
 
